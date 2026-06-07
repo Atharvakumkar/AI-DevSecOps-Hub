@@ -86,7 +86,7 @@ AI-DevSecOps-Hub/
 
 **Frontend**
 
-- JavaScript, HTML5, CSS3
+- JavaScript
 
 **Security Scanning**
 
@@ -233,7 +233,7 @@ The backend exposes the following endpoint. Full request and response schemas ar
 ## Security Notes
 
 - The `docker-compose.yml` in this repository contains hardcoded credentials including a Jenkins API token and a Groq API key. These should be treated as compromised and rotated immediately. All secrets must be moved to a `.env` file or a secrets manager and loaded via environment variable substitution in Compose.
-- The `.env.example` file exists as a template. Ensure the actual `.env` file is listed in `.gitignore` and never committed to version control.
+- The `.env.example` file exists as a template.
 - The SonarQube default admin password should be changed immediately after first login.
 - Trivy is run with `--scanners vuln` which covers OS packages and application dependencies. For broader coverage, consider adding `--scanners secret` to detect hardcoded secrets in the scanned repository.
 
