@@ -12,10 +12,10 @@ services:
       - FLASK_ENV=development
       - DB_PATH=/app/data/scans.db
       - JENKINS_URL=http://host.docker.internal:2000
-      - JENKINS_USER=Atharvakumkar
-      - JENKINS_TOKEN=11eb92f40bd544d5a20801bd8fddcc508c
-      - JENKINS_JOB=devsecops-scan
-      - GROQ_API_KEY=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
+      - JENKINS_USER=(USER_NAME)
+      - JENKINS_TOKEN=(JENKINS_TOKEN)
+      - JENKINS_JOB=(JENKINS_JOB_NAME)
+      - GROQ_API_KEY=(API_KEY)
     networks:
       - devsecops-net
 
