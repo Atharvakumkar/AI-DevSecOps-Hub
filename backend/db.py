@@ -21,6 +21,7 @@ def init_db():
             high      INTEGER DEFAULT 0,
             medium    INTEGER DEFAULT 0,
             low       INTEGER DEFAULT 0,
+            advice    TEXT DEFAULT '',
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -32,8 +33,8 @@ def save_scan(data):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO scans (repo_url, repo_name, status, critical, high, medium, low)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO scans (repo_url, repo_name, status, critical, high, medium, low, advice)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         data.get("repo_url", ""),
         data.get("repo_name", ""),
@@ -42,6 +43,7 @@ def save_scan(data):
         data.get("high", 0),
         data.get("medium", 0),
         data.get("low", 0),
+        data.get("advice", ""),
     ))
     scan_id = cursor.lastrowid
     conn.commit()
@@ -59,3 +61,26 @@ def get_scan_by_id(scan_id):
     row = conn.execute("SELECT * FROM scans WHERE id = ?", (scan_id,)).fetchone()
     conn.close()
     return dict(row) if row else None
+
+def update_scan_by_repo(repo_name, data):
+    conn = get_connection()
+    conn.execute("""
+        UPDATE scans SET
+            status = ?,
+            critical = ?,
+            high = ?,
+            medium = ?,
+            low = ?,
+            advice = ?
+        WHERE repo_name = ? AND status = 'pending'
+    """, (
+        data.get("status", "completed"),
+        data.get("critical", 0),
+        data.get("high", 0),
+        data.get("medium", 0),
+        data.get("low", 0),
+        data.get("advice", ""),
+        repo_name,
+    ))
+    conn.commit()
+    conn.close()
