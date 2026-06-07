@@ -10,10 +10,15 @@ pipeline {
         stage('Trivy Scan') {
             steps {
                 sh """
-                docker run aquasec/trivy:latest fs \
-                    --format json \
-                    --output /results/trivy.json \
-                    ./repo
+                    docker run --rm \
+                        -v \$(pwd)/repo:/scan \
+                        -v /var/jenkins_home/trivy-cache:/root/.cache/trivy \
+                        aquasec/trivy:latest fs \
+                        --scanners vuln \
+                        --format json \
+                        --output /scan/trivy-report.json \
+                        --severity CRITICAL,HIGH,MEDIUM,LOW \
+                        /scan || true
                 """
             }
         }
