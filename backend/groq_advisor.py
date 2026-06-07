@@ -1,6 +1,6 @@
 from groq import Groq
 
-client = Groq(api_key="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")
+client = Groq(api_key=<API KEY>)
 
 def get_security_advice(repo_name, critical, high, medium, low):
     prompt = f"""
