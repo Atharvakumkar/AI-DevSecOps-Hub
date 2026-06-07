@@ -2,13 +2,15 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from db import init_db, save_scan, get_all_scans, get_scan_by_id
 import requests
+import os
 
 app = Flask(__name__)
 CORS(app)
 
-JENKINS_URL = "http://localhost:2000"
-JENKINS_USER = "Atharvakumkar"
-JENKINS_TOKEN = "11eb92f40bd544d5a20801bd8fddcc508c"
+JENKINS_URL = os.getenv("JENKINS_URL", "http://host.docker.internal:2000")
+JENKINS_USER = os.getenv("JENKINS_USER", "Atharvakumkar")
+JENKINS_TOKEN = os.getenv("JENKINS_TOKEN", "11eb92f40bd544d5a20801bd8fddcc508c")
+JENKINS_JOB = os.getenv("JENKINS_JOB", "devsecops-scan")
 
 @app.route("/api/health", methods=["GET"])
 def health():
@@ -79,4 +81,4 @@ def receive_report():
 
 if __name__ == "__main__":
     init_db()
-    app.run(port=7000, debug=True, use_reloader=False)
+    app.run(host="0.0.0.0", port=7000, debug=True, use_reloader=False)
