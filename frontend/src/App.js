@@ -372,7 +372,7 @@ function App() {
     setLoading(true);
     setMessage({ text: "", type: "" });
     try {
-      const res = await axios.post(`${API}/api/scan`, { repo_url: repoUrl });
+      await axios.post(`${API}/api/scan`, { repo_url: repoUrl });
       setRepoUrl("");
       fetchScans();
     } catch {

@@ -1,16 +1,52 @@
 services:
-  jenkins:
-    image: jenkins/jenkins:lts
-    ports: ["8080:8080"]
-
-  sonarqube:
-    image: sonarqube:community
-    ports: ["9000:9000"]
 
   backend:
     build: ./backend
-    ports: ["5000:5000"]
+    container_name: devsecops-backend
+    ports:
+      - "7000:7000"
+    volumes:
+      - ./backend:/app
+      - sqlite_data:/app/data
+    environment:
+      - FLASK_ENV=development
+      - DB_PATH=/app/data/scans.db
+      - JENKINS_URL=http://host.docker.internal:2000
+      - JENKINS_USER=Atharvakumkar
+      - JENKINS_TOKEN=11eb92f40bd544d5a20801bd8fddcc508c
+      - JENKINS_JOB=devsecops-scan
+      - GROQ_API_KEY=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
+    networks:
+      - devsecops-net
 
   frontend:
     build: ./frontend
-    ports: ["3000:3000"]
+    container_name: devsecops-frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - devsecops-net
+
+  sonarqube:
+    image: sonarqube:community
+    container_name: devsecops-sonarqube
+    ports:
+      - "9000:9000"
+    environment:
+      - SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_logs:/opt/sonarqube/logs
+    networks:
+      - devsecops-net
+
+volumes:
+  sqlite_data:
+  sonarqube_data:
+  sonarqube_logs:
+
+networks:
+  devsecops-net:
+    driver: bridge
