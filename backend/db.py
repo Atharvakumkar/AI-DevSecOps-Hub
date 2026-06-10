@@ -2,9 +2,10 @@ import sqlite3
 import os
 from datetime import datetime
 
-DB_PATH = "scans.db"
+DB_PATH = os.getenv("DB_PATH", "scans.db")
 
 def get_connection():
+    os.makedirs(os.path.dirname(DB_PATH) if os.path.dirname(DB_PATH) else ".", exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
@@ -13,16 +14,17 @@ def init_db():
     conn = get_connection()
     conn.execute("""
         CREATE TABLE IF NOT EXISTS scans (
-            id        INTEGER PRIMARY KEY AUTOINCREMENT,
-            repo_url  TEXT,
-            repo_name TEXT,
-            status    TEXT DEFAULT 'pending',
-            critical  INTEGER DEFAULT 0,
-            high      INTEGER DEFAULT 0,
-            medium    INTEGER DEFAULT 0,
-            low       INTEGER DEFAULT 0,
-            advice    TEXT DEFAULT '',
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            repo_url        TEXT,
+            repo_name       TEXT,
+            status          TEXT DEFAULT 'pending',
+            critical        INTEGER DEFAULT 0,
+            high            INTEGER DEFAULT 0,
+            medium          INTEGER DEFAULT 0,
+            low             INTEGER DEFAULT 0,
+            advice          TEXT DEFAULT '',
+            sonarqube_url   TEXT DEFAULT '',
+            timestamp       DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     """)
     conn.commit()
@@ -33,8 +35,8 @@ def save_scan(data):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO scans (repo_url, repo_name, status, critical, high, medium, low, advice)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO scans (repo_url, repo_name, status, critical, high, medium, low, advice, sonarqube_url)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         data.get("repo_url", ""),
         data.get("repo_name", ""),
@@ -44,6 +46,7 @@ def save_scan(data):
         data.get("medium", 0),
         data.get("low", 0),
         data.get("advice", ""),
+        data.get("sonarqube_url", ""),
     ))
     scan_id = cursor.lastrowid
     conn.commit()
@@ -71,7 +74,8 @@ def update_scan_by_repo(repo_name, data):
             high = ?,
             medium = ?,
             low = ?,
-            advice = ?
+            advice = ?,
+            sonarqube_url = ?
         WHERE repo_name = ? AND status = 'pending'
     """, (
         data.get("status", "completed"),
@@ -80,6 +84,7 @@ def update_scan_by_repo(repo_name, data):
         data.get("medium", 0),
         data.get("low", 0),
         data.get("advice", ""),
+        data.get("sonarqube_url", ""),
         repo_name,
     ))
     conn.commit()
