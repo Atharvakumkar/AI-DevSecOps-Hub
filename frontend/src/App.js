@@ -210,6 +210,16 @@ const styles = {
     color: "#8b949e",
     fontSize: 14,
   },
+  sonarLink: {
+    display: "inline-block",
+    marginTop: 8,
+    fontSize: 12,
+    color: "#58a6ff",
+    textDecoration: "none",
+    border: "1px solid #30363d",
+    borderRadius: 6,
+    padding: "3px 10px",
+  },
 };
 
 function getRiskLevel(critical, high, medium, low) {
@@ -257,10 +267,17 @@ function ScanCard({ scan }) {
 
   return (
     <div style={styles.card}>
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 0.4; }
+          50% { opacity: 1; }
+        }
+      `}</style>
+
       {isPending && (
         <div style={{ marginBottom: 14 }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-            <span style={{ fontSize: 12, color: "#58a6ff" }}>Jenkins scanning...</span>
+            <span style={{ fontSize: 12, color: "#58a6ff" }}>⏳ Jenkins scanning...</span>
             <span style={{ fontSize: 12, color: "#8b949e" }}>{Math.round(progress)}%</span>
           </div>
           <div style={{ background: "#0d1117", borderRadius: 4, height: 6, overflow: "hidden" }}>
@@ -273,7 +290,7 @@ function ScanCard({ scan }) {
             }} />
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, gap: 8 }}>
-            {["Cloning repo", "Running Trivy", "Parsing results", "Sending report"].map((step, i) => (
+            {["Cloning repo", "SonarQube", "Trivy scan", "Sending report"].map((step, i) => (
               <div key={i} style={{
                 flex: 1,
                 background: progress > (i + 1) * 22 ? "#1f6feb20" : "#161b22",
@@ -329,10 +346,23 @@ function ScanCard({ scan }) {
         Status: {scan.status} · {timeAgo(scan.timestamp)}
       </div>
 
+      {scan.sonarqube_url && !isPending && (
+  <a
+    href={scan.sonarqube_url.replace(
+      "host.docker.internal",
+      "localhost"
+    )}
+    target="_blank"
+    rel="noreferrer"
+    style={styles.sonarLink}
+  >
+    📊 View SonarQube Report →
+  </a>
+)}
       {scan.advice && !isPending && (
         <div style={styles.adviceBox}>
           <div style={styles.adviceHeader} onClick={() => setOpen(!open)}>
-            <span style={styles.adviceTitle}>AI Reports</span>
+            <span style={styles.adviceTitle}>🤖 AI Security Advice</span>
             <span style={{ color: "#58a6ff", fontSize: 12 }}>{open ? "▲ Hide" : "▼ Show"}</span>
           </div>
           {open && <div style={styles.adviceContent}>{scan.advice}</div>}
@@ -359,7 +389,7 @@ function App() {
     }
   };
 
- useEffect(() => {
+  useEffect(() => {
     fetchScans();
     const interval = setInterval(() => {
       fetchScans();
@@ -373,30 +403,22 @@ function App() {
     setMessage({ text: "", type: "" });
     try {
       await axios.post(`${API}/api/scan`, { repo_url: repoUrl });
+      setMessage({ text: `✅ Scan queued! Jenkins is running...`, type: "success" });
       setRepoUrl("");
       fetchScans();
     } catch {
-      setMessage({ text: "Failed to trigger scan. Is the backend running?", type: "error" });
+      setMessage({ text: "❌ Failed to trigger scan. Is the backend running?", type: "error" });
     }
     setLoading(false);
   };
-  
-    const totalCritical = scans.reduce(
-      (s, x) => s + (x.critical || 0),
-      0
-    );
+
+  const totalCritical = scans.reduce((s, x) => s + (x.critical || 0), 0);
 
   return (
     <div style={styles.app}>
-      <style>{`
-  @keyframes pulse {
-    0%, 100% { opacity: 0.4; }
-    50% { opacity: 1; }
-  }
-`}</style>
       <div style={styles.header}>
         <div style={styles.logo}>
-          AI DevSecOps Hub
+          🛡️ AI DevSecOps Hub
         </div>
         <div>
           <span style={styles.statusDot(connected)} />
@@ -446,7 +468,7 @@ function App() {
           )}
         </div>
 
-        <div style={styles.sectionTitle}>Scans: </div>
+        <div style={styles.sectionTitle}>📋 Recent Scans ({scans.length})</div>
         {scans.length === 0 ? (
           <div style={styles.empty}>
             <p>No scans yet.</p>
