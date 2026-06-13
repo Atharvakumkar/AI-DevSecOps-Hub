@@ -356,13 +356,13 @@ function ScanCard({ scan }) {
     rel="noreferrer"
     style={styles.sonarLink}
   >
-    📊 View SonarQube Report →
+     View SonarQube Report →
   </a>
 )}
       {scan.advice && !isPending && (
         <div style={styles.adviceBox}>
           <div style={styles.adviceHeader} onClick={() => setOpen(!open)}>
-            <span style={styles.adviceTitle}>🤖 AI Security Advice</span>
+            <span style={styles.adviceTitle}> AI Security Advice</span>
             <span style={{ color: "#58a6ff", fontSize: 12 }}>{open ? "▲ Hide" : "▼ Show"}</span>
           </div>
           {open && <div style={styles.adviceContent}>{scan.advice}</div>}
