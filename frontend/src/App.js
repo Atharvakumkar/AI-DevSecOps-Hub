@@ -277,7 +277,7 @@ function ScanCard({ scan }) {
       {isPending && (
         <div style={{ marginBottom: 14 }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-            <span style={{ fontSize: 12, color: "#58a6ff" }}>⏳ Jenkins scanning...</span>
+            <span style={{ fontSize: 12, color: "#58a6ff" }}>Jenkins scanning...</span>
             <span style={{ fontSize: 12, color: "#8b949e" }}>{Math.round(progress)}%</span>
           </div>
           <div style={{ background: "#0d1117", borderRadius: 4, height: 6, overflow: "hidden" }}>
@@ -403,11 +403,11 @@ function App() {
     setMessage({ text: "", type: "" });
     try {
       await axios.post(`${API}/api/scan`, { repo_url: repoUrl });
-      setMessage({ text: `✅ Scan queued! Jenkins is running...`, type: "success" });
+      setMessage({ text: ` Scan queued! Jenkins is running...`, type: "success" });
       setRepoUrl("");
       fetchScans();
     } catch {
-      setMessage({ text: "❌ Failed to trigger scan. Is the backend running?", type: "error" });
+      setMessage({ text: "Failed to trigger scan. Is the backend running?", type: "error" });
     }
     setLoading(false);
   };
