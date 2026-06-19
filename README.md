@@ -134,8 +134,6 @@ Copy `.env.example` to `.env` and populate the values before starting the stack.
 | `JENKINS_JOB` | Name of the Jenkins job to trigger |
 | `GROQ_API_KEY` | API key for Groq model inference |
 
-**Never commit a populated `.env` file or hardcode credentials in `docker-compose.yml`.**
-
 ---
 
 ## Running the Stack
@@ -290,7 +288,44 @@ The backend exposes the following endpoint. Full request and response schemas ar
 - Trivy is run with `--scanners vuln` which covers OS packages and application dependencies. For broader coverage, consider adding `--scanners secret` to detect hardcoded secrets in the scanned repository.
 
 ---
+## Troubleshooting
+**Docker Permission Denied in Jenkins**
+If Jenkins displays:
 
+```text
+permission denied while trying to connect to the Docker daemon socket
+```
+
+ensure that the Jenkins container has access to the Docker socket.
+
+Temporary workaround:
+
+```bash
+docker exec -u 0 -it jenkins bash
+chmod 666 /var/run/docker.sock
+```
+
+Verify access:
+
+```bash
+docker exec -it jenkins docker ps
+```
+
+### SonarQube Shows 0 Files Indexed
+
+Ensure the repository is mounted correctly inside the SonarScanner container and that `sonar.sources` points to the repository root.
+
+### Trivy Report Not Generated
+
+Verify that:
+
+* Docker is running
+* Trivy cache directory exists
+* The repository was cloned successfully
+* The Jenkins workspace has write permissions
+
+
+---
 ## Author
 
 Atharva Kumkar
