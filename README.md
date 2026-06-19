@@ -135,6 +135,7 @@ Copy `.env.example` to `.env` and populate the values before starting the stack.
 
 ## Running the Stack
 
+Method 2 -->
 Clone the repository:
 
 ```bash
