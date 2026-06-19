@@ -43,12 +43,17 @@ User --> Frontend (3000) --> Backend (7000) <-- Jenkins (2000)
 
 ## Pipeline
 
-1. User submits a Git repository URL via the frontend.
-2. The frontend calls the backend API, which triggers a Jenkins job (`devsecops-scan`) via the Jenkins REST API, passing the repository URL as a parameter.
-3. Jenkins clones the repository and runs `aquasec/trivy:latest` as a Docker container against the cloned filesystem, scanning for vulnerabilities at CRITICAL, HIGH, MEDIUM, and LOW severity. Output is written as `trivy-report.json`.
-4. Jenkins posts the report JSON to the backend at `POST /api/report`.
-5. The backend stores the raw report in SQLite and forwards it to the Groq API for AI-driven analysis and summarisation.
-6. The frontend polls or retrieves the processed report and renders the findings.
+1) User submits a public GitHub repository URL through the frontend.
+2) The backend triggers the Jenkins job (devsecops-scan) using the Jenkins REST API.
+3) Jenkins clones the target repository.
+4) SonarQube performs static code analysis and security rule evaluation.
+5) Trivy performs a filesystem vulnerability scan on the repository source code.
+6) If a Dockerfile is detected, Jenkins builds a temporary Docker image and Trivy performs a container image vulnerability scan.
+7) Vulnerability findings are parsed and categorized by severity (Critical, High, Medium, Low).
+8) Jenkins sends the results to the Flask backend.
+9) The backend stores the results in SQLite.
+10) The Groq AI model generates a structured security analysis and remediation report.
+11) The frontend displays scan history, vulnerability summaries, and AI-generated recommendations.
 
 ---
 
@@ -197,32 +202,71 @@ The frontend is accessible at `http://localhost:3000`. The backend API is access
 
 ## Jenkins Pipeline
 
-The `Jenkinsfile` defines a three-stage declarative pipeline. The pipeline accepts a single string parameter:
+The Jenkins pipeline accepts a GitHub repository URL and performs automated DevSecOps analysis.
 
-| Parameter | Default | Description |
-|---|---|---|
-| `REPO_URL` | (empty) | The Git repository URL to clone and scan |
+**Stage 1 — Prepare Metadata**
 
-**Stage 1 — Clone**
+Generates a SonarQube-compatible project key and repository metadata.
 
-Clones the target repository into `./repo` on the Jenkins agent workspace.
+**Stage 2 — Clone Repository**
 
-**Stage 2 — Trivy Scan**
+Clones the target repository into the Jenkins workspace.
 
-Runs the official Trivy Docker image against the cloned filesystem. The Trivy cache is mounted from `/var/jenkins_home/trivy-cache` to avoid re-downloading the vulnerability database on each run. Scan parameters:
+**Stage 3 — Repository Inspection**
 
-| Parameter | Value |
-|---|---|
-| Scanner | `vuln` (OS and library vulnerabilities) |
-| Output format | `json` |
-| Output file | `/scan/trivy-report.json` |
-| Severity filter | `CRITICAL,HIGH,MEDIUM,LOW` |
+Detects:
 
-The stage uses `|| true` to prevent the pipeline from failing if Trivy exits with a non-zero code due to found vulnerabilities, allowing the results to still be posted.
+package.json
+requirements.txt
+Dockerfile
 
-**Stage 3 — Send Results**
+and determines the repository technology stack.
 
-Posts the scan results to the backend via `curl -X POST http://backend:5000/api/report`.
+**Stage 4 — SonarQube Analysis**
+
+Runs static code analysis using SonarQube and publishes:
+
+Bugs
+Vulnerabilities
+Security Hotspots
+Code Smells
+Maintainability Metrics
+
+**Stage 5 — Trivy Filesystem Scan**
+
+Scans source code dependencies and packages for:
+
+Critical Vulnerabilities
+High Vulnerabilities
+Medium Vulnerabilities
+Low Vulnerabilities
+Exposed Secrets
+
+**Stage 6 — Trivy Docker Image Scan**
+
+If a Dockerfile exists:
+
+Builds a temporary Docker image
+Performs container vulnerability analysis
+Generates a JSON report
+
+**Stage 7 — Parse Results**
+
+Aggregates vulnerability counts from generated Trivy reports.
+
+**Stage 8 — Send Results**
+
+Posts the aggregated findings to the backend API.
+
+**Stage 9 — Archive Artifacts**
+
+Stores:
+
+trivy-report.json
+trivy-image-report.json
+summary.json
+
+for future reference and debugging.
 
 ---
 
