@@ -1,14 +1,6 @@
 pipeline {
 agent any
 
-parameters {
-    string(
-        name: 'REPO_URL',
-        defaultValue: '',
-        description: 'GitHub Repository URL'
-    )
-}
-
 environment {
     SONARQUBE_URL = 'http://host.docker.internal:9000'
     BACKEND_URL   = 'http://host.docker.internal:7000'
