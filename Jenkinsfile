@@ -39,16 +39,22 @@ stages {
 }
     }
 
-    stage('Clone Repository') {
-        steps {
-            sh '''
-                rm -rf repo
-                git clone ${REPO_URL} repo
+    stage('Prepare Repository') {
+    steps {
+        sh '''
+            echo "===== CURRENT WORKSPACE ====="
+            pwd
 
-                echo "Repository cloned successfully"
-            '''
-        }
+            echo "===== REPOSITORY CONTENTS ====="
+            ls -lah
+
+            echo "===== GIT REMOTE ====="
+            git remote -v
+
+            echo "Repository is already checked out by Jenkins SCM"
+        '''
     }
+}
 
     stage('Repository Inspection') {
         steps {
