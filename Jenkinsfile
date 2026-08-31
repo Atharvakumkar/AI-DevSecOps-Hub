@@ -9,21 +9,34 @@ environment {
 stages {
 
     stage('Prepare Metadata') {
-        steps {
-            script {
+    steps {
+        script {
 
-                env.REPO_NAME = params.REPO_URL
-                    .replace('https://github.com/', '')
-                    .replace('.git', '')
+            def repoUrl = sh(
+                script: 'git config --get remote.origin.url',
+                returnStdout: true
+            ).trim()
 
-                env.PROJECT_KEY = env.REPO_NAME
-                    .replace('/', '-')
-                    .toLowerCase()
+            echo "SCM Repository URL: ${repoUrl}"
 
-                echo "Repository Name: ${env.REPO_NAME}"
-                echo "Project Key: ${env.PROJECT_KEY}"
-            }
+            env.REPO_URL = repoUrl
+                .replace('https://github.com/', '')
+                .replace('http://github.com/', '')
+                .replace('git@github.com:', '')
+                .replace('.git', '')
+                .replaceAll('/$', '')
+
+            env.REPO_NAME = env.REPO_URL
+
+            env.PROJECT_KEY = env.REPO_NAME
+                .replace('/', '-')
+                .toLowerCase()
+
+            echo "Repository Name: ${env.REPO_NAME}"
+            echo "Project Key: ${env.PROJECT_KEY}"
         }
+    }
+}
     }
 
     stage('Clone Repository') {
