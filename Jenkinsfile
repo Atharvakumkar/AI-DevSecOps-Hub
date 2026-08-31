@@ -1,169 +1,216 @@
 pipeline {
-agent any
+    agent any
 
-parameters {
-    string(
-        name: 'REPO_URL',
-        defaultValue: '',
-        description: 'GitHub Repository URL'
-    )
-}
+    environment {
+        SONARQUBE_URL = 'http://host.docker.internal:9000'
+        BACKEND_URL   = 'http://host.docker.internal:7000'
+    }
 
-environment {
-    SONARQUBE_URL = 'http://host.docker.internal:9000'
-    BACKEND_URL   = 'http://host.docker.internal:7000'
-}
+    stages {
 
-stages {
+        stage('Prepare Metadata') {
+            steps {
+                script {
 
-    stage('Prepare Metadata') {
-        steps {
-            script {
+                    def repoUrl = sh(
+                        script: 'git config --get remote.origin.url',
+                        returnStdout: true
+                    ).trim()
 
-                env.REPO_NAME = params.REPO_URL
-                    .replace('https://github.com/', '')
-                    .replace('.git', '')
+                    echo "SCM Repository URL: ${repoUrl}"
 
-                env.PROJECT_KEY = env.REPO_NAME
-                    .replace('/', '-')
-                    .toLowerCase()
+                    env.REPO_URL = repoUrl
+                        .replace('https://github.com/', '')
+                        .replace('http://github.com/', '')
+                        .replace('git@github.com:', '')
+                        .replace('.git', '')
+                        .replaceAll('/$', '')
 
-                echo "Repository Name: ${env.REPO_NAME}"
-                echo "Project Key: ${env.PROJECT_KEY}"
+                    env.REPO_NAME = env.REPO_URL
+
+                    env.PROJECT_KEY = env.REPO_NAME
+                        .replace('/', '-')
+                        .toLowerCase()
+
+                    echo "Repository Name: ${env.REPO_NAME}"
+                    echo "Project Key: ${env.PROJECT_KEY}"
+                }
             }
         }
-    }
 
-    stage('Clone Repository') {
-        steps {
-            sh '''
-                rm -rf repo
-                git clone ${REPO_URL} repo
+        stage('Repository Inspection') {
+            steps {
+                sh '''
+                    echo "===== CURRENT WORKSPACE ====="
+                    pwd
 
-                echo "Repository cloned successfully"
-            '''
-        }
-    }
+                    echo "===== REPOSITORY CONTENTS ====="
+                    ls -lah
 
-    stage('Repository Inspection') {
-        steps {
-            sh '''
-                echo "===== package.json ====="
-                find repo -name package.json || true
+                    echo "===== package.json ====="
+                    find . -name package.json -not -path './.git/*' || true
 
-                echo "===== requirements.txt ====="
-                find repo -name requirements.txt || true
+                    echo "===== requirements.txt ====="
+                    find . -name requirements.txt -not -path './.git/*' || true
 
-                echo "===== Dockerfile ====="
-                find repo -name Dockerfile || true
-            '''
-        }
-    }
-    
-    stage('Debug Metadata') {
-    steps {
-        echo "REPO_NAME=${env.REPO_NAME}"
-        echo "PROJECT_KEY=${env.PROJECT_KEY}"
-    }
-}
-
-    stage('SonarQube Analysis') {
-    steps {
-        withCredentials([
-            string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN')
-        ]) {
-            sh """
-                docker run --rm \
-                --network host \
-                -e SONAR_HOST_URL=${SONARQUBE_URL} \
-                -e SONAR_TOKEN=\$SONAR_TOKEN \
-                -v \$(pwd)/repo:/usr/src \
-                sonarsource/sonar-scanner-cli:latest \
-                -Dsonar.projectKey=${env.PROJECT_KEY} \
-                -Dsonar.projectName="${env.REPO_NAME}" \
-                -Dsonar.projectBaseDir=/usr/src \
-                -Dsonar.sources=/usr/src \
-                -Dsonar.inclusions=**/*.js,**/*.ts,**/*.jsx,**/*.tsx,**/*.json \
-                -Dsonar.scm.disabled=true \
-                -Dsonar.host.url=${SONARQUBE_URL} \
-                -Dsonar.token=\$SONAR_TOKEN
-            """
-        }
-    }
-}
-    stage('Trivy Filesystem Scan') {
-    steps {
-        sh '''
-            mkdir -p /var/jenkins_home/trivy-cache
-
-           docker run --rm \
--v $(pwd):/workspace \
--v $(pwd)/repo:/scan \
--v /var/jenkins_home/trivy-cache:/root/.cache/trivy \
-aquasec/trivy:latest fs \
---scanners vuln,secret \
---format json \
---severity CRITICAL,HIGH,MEDIUM,LOW \
---skip-dirs .git \
-/scan > trivy-report.json
-
-echo "===== CHECK FS REPORT ====="
-ls -lah repo/trivy-report.json || true
-find repo -name "*trivy*" || true
-
-echo "===== AFTER FS SCAN ====="
-find repo -name "*trivy*" -type f || true
-
-echo "===== ROOT WORKSPACE ====="
-find . -name "*trivy*" -type f || true
-
-echo "TEST" > repo/test-file.txt
-
-echo "===== TEST FILE ====="
-ls -lah repo/test-file.txt
-cat repo/test-file.txt
-        '''
-    }
-}
-    stage('Trivy Docker Image Scan') {
-    steps {
-        script {
-
-            def buildStatus = sh(
-                script: "docker build -t scan-target-${BUILD_NUMBER} repo",
-                returnStatus: true
-            )
-
-            if (buildStatus != 0) {
-                echo "Docker build failed. Skipping image scan."
-                return
+                    echo "===== Dockerfile ====="
+                    find . -name Dockerfile -not -path './.git/*' || true
+                '''
             }
-
-            sh """
-                docker run --rm \
--v /var/run/docker.sock:/var/run/docker.sock \
--v /var/jenkins_home/trivy-cache:/root/.cache/trivy \
-aquasec/trivy:latest image \
---format json \
-scan-target-${BUILD_NUMBER} > trivy-image-report.json
-
-                echo "===== CHECK IMAGE REPORT ====="
-
-                ls -lah trivy-image-report.json || true
-
-                find . -name "*trivy*" -type f || true
-
-                echo "===== WORKSPACE CONTENTS ====="
-
-                ls -lah | head -50
-            """
         }
-    }
-}
-    stage('Parse Results') {
-    steps {
-        sh '''
-python3 << EOF
+
+        stage('Debug Metadata') {
+            steps {
+                echo "REPO_URL=${env.REPO_URL}"
+                echo "REPO_NAME=${env.REPO_NAME}"
+                echo "PROJECT_KEY=${env.PROJECT_KEY}"
+            }
+        }
+
+        stage('Legitify Security Scan') {
+            steps {
+
+                withCredentials([
+                    string(
+                        credentialsId: 'legitify-github-token',
+                        variable: 'SCM_TOKEN'
+                    )
+                ]) {
+
+                    sh '''
+                        set +x
+
+                        echo "========================================"
+                        echo "        LEGITIFY SECURITY SCAN"
+                        echo "========================================"
+
+                        echo "Repository: ${REPO_NAME}"
+
+                        legitify analyze \
+                            --repo "${REPO_NAME}" \
+                            --failed-only \
+                            --scorecard verbose \
+                            --output-format json \
+                            --output-file legitify-report.json \
+                            --error-file legitify-error.log \
+                            --permissions-file legitify-permissions.json
+
+                        echo "========================================"
+                        echo "LegITIFY SCAN COMPLETED"
+                        echo "========================================"
+
+                        echo "Report:"
+                        ls -lah legitify-report.json || true
+
+                        echo "Error log:"
+                        ls -lah legitify-error.log || true
+
+                        echo "Permissions log:"
+                        ls -lah legitify-permissions.json || true
+                    '''
+                }
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+
+                withCredentials([
+                    string(
+                        credentialsId: 'sonarqube-token',
+                        variable: 'SONAR_TOKEN'
+                    )
+                ]) {
+
+                    sh '''
+                        docker run --rm \
+                            --network host \
+                            -e SONAR_HOST_URL="${SONARQUBE_URL}" \
+                            -e SONAR_TOKEN="${SONAR_TOKEN}" \
+                            -v "$(pwd):/usr/src" \
+                            sonarsource/sonar-scanner-cli:latest \
+                            -Dsonar.projectKey="${PROJECT_KEY}" \
+                            -Dsonar.projectName="${REPO_NAME}" \
+                            -Dsonar.projectBaseDir=/usr/src \
+                            -Dsonar.sources=/usr/src \
+                            -Dsonar.inclusions="**/*.js,**/*.ts,**/*.jsx,**/*.tsx,**/*.json" \
+                            -Dsonar.scm.disabled=true \
+                            -Dsonar.host.url="${SONARQUBE_URL}" \
+                            -Dsonar.token="${SONAR_TOKEN}"
+                    '''
+                }
+            }
+        }
+
+        stage('Trivy Filesystem Scan') {
+            steps {
+
+                sh '''
+                    mkdir -p /var/jenkins_home/trivy-cache
+
+                    echo "========================================"
+                    echo "       TRIVY FILESYSTEM SCAN"
+                    echo "========================================"
+
+                    docker run --rm \
+                        -v "$(pwd):/scan" \
+                        -v /var/jenkins_home/trivy-cache:/root/.cache/trivy \
+                        aquasec/trivy:latest fs \
+                        --scanners vuln,secret \
+                        --format json \
+                        --severity CRITICAL,HIGH,MEDIUM,LOW \
+                        --skip-dirs .git \
+                        /scan > trivy-report.json
+
+                    echo "===== TRIVY REPORT ====="
+                    ls -lah trivy-report.json || true
+                '''
+            }
+        }
+
+        stage('Trivy Docker Image Scan') {
+            steps {
+
+                script {
+
+                    def buildStatus = sh(
+                        script: "docker build -t scan-target-${BUILD_NUMBER} .",
+                        returnStatus: true
+                    )
+
+                    if (buildStatus != 0) {
+
+                        echo "Docker build failed. Skipping image scan."
+
+                    } else {
+
+                        sh '''
+                            echo "========================================"
+                            echo "      TRIVY DOCKER IMAGE SCAN"
+                            echo "========================================"
+
+                            docker run --rm \
+                                -v /var/run/docker.sock:/var/run/docker.sock \
+                                -v /var/jenkins_home/trivy-cache:/root/.cache/trivy \
+                                aquasec/trivy:latest image \
+                                --format json \
+                                "scan-target-${BUILD_NUMBER}" \
+                                > trivy-image-report.json
+
+                            echo "===== IMAGE REPORT ====="
+                            ls -lah trivy-image-report.json || true
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Parse Results') {
+            steps {
+
+                sh '''
+python3 << 'EOF'
+
 import json
 import os
 import glob
@@ -184,32 +231,39 @@ for f in glob.glob("**/*.json", recursive=True):
 
 print("================================")
 
-def parse_report(path):
+
+def parse_trivy_report(path):
+
     if not os.path.exists(path):
         print(f"Missing: {path}")
         return
 
     try:
+
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        print(f"Parsing: {path}")
+        print(f"Parsing Trivy report: {path}")
 
         for result in data.get("Results", []):
+
             for vuln in result.get("Vulnerabilities", []) or []:
+
                 sev = vuln.get("Severity", "").upper()
 
                 if sev in counts:
                     counts[sev] += 1
 
     except Exception as e:
+
         print(f"Error parsing {path}: {e}")
 
-parse_report("trivy-report.json")
-parse_report("trivy-image-report.json")
+
+parse_trivy_report("trivy-report.json")
+parse_trivy_report("trivy-image-report.json")
 
 print("================================")
-print("FINAL COUNTS")
+print("FINAL TRIVY COUNTS")
 print(counts)
 print("================================")
 
@@ -219,14 +273,16 @@ with open("summary.json", "w") as f:
 print("summary.json created successfully")
 
 EOF
-        '''
-    }
-}
+                '''
+            }
+        }
 
-    stage('Send Results To Dashboard') {
-    steps {
-        sh '''
+        stage('Send Results To Dashboard') {
+            steps {
+
+                sh '''
 python3 << EOF
+
 import json
 import urllib.request
 
@@ -254,39 +310,64 @@ req = urllib.request.Request(
 response = urllib.request.urlopen(req, timeout=15)
 
 print(response.read().decode())
+
 EOF
-        '''
+                '''
+            }
+        }
+
+        stage('Archive Artifacts') {
+            steps {
+
+                archiveArtifacts(
+                    artifacts: 'legitify-report.json',
+                    allowEmptyArchive: true
+                )
+
+                archiveArtifacts(
+                    artifacts: 'legitify-error.log',
+                    allowEmptyArchive: true
+                )
+
+                archiveArtifacts(
+                    artifacts: 'legitify-permissions.json',
+                    allowEmptyArchive: true
+                )
+
+                archiveArtifacts(
+                    artifacts: 'trivy-report.json',
+                    allowEmptyArchive: true
+                )
+
+                archiveArtifacts(
+                    artifacts: 'trivy-image-report.json',
+                    allowEmptyArchive: true
+                )
+
+                archiveArtifacts(
+                    artifacts: 'summary.json',
+                    allowEmptyArchive: true
+                )
+            }
+        }
     }
-}
 
-stage('Archive Artifacts') {
-steps {
-archiveArtifacts artifacts: 'trivy-report.json', allowEmptyArchive: true
-archiveArtifacts artifacts: 'trivy-image-report.json', allowEmptyArchive: true
-archiveArtifacts artifacts: 'summary.json', allowEmptyArchive: true
-}
-}
+    post {
 
-} // <-- closes stages
+        success {
+            echo "Pipeline completed successfully"
+        }
 
-post {
+        failure {
+            echo "Pipeline failed"
+        }
 
-success {
-    echo "Pipeline completed successfully"
-}
-
-failure {
-    echo "Pipeline failed"
-}
-
-always {
-    cleanWs(
-        cleanWhenNotBuilt: true,
-        cleanWhenSuccess: true,
-        cleanWhenFailure: false
-    )
-}
-
-}
-
-} // <-- closes pipeline
+        always {
+            cleanWs(
+                cleanWhenNotBuilt: true,
+                cleanWhenSuccess: true,
+                cleanWhenFailure: false
+            )
+        }
+    }
+}    
