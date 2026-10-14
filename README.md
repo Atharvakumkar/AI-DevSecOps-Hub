@@ -1,343 +1,765 @@
 # AI DevSecOps Hub
 
-A full-stack DevSecOps platform that automates vulnerability scanning on any public Git repository. A user submits a repository URL through the frontend, Jenkins clones it and runs a Trivy filesystem scan, the results are sent to the Flask backend, stored in SQLite, and then analysed by a Groq-powered AI model that produces a structured security report. SonarQube runs alongside for static code analysis. The entire stack is containerised and orchestrated with Docker Compose.
+### Automated Security Scanning and AI-Powered Vulnerability Analysis
+
+AI DevSecOps Hub is a full-stack DevSecOps platform that automates security analysis for public Git repositories by integrating **Jenkins, Trivy, SonarQube, Flask, SQLite, and the Groq API**.
+
+Users submit a repository URL through a web interface, triggering an automated pipeline that analyzes the source code, scans dependencies for vulnerabilities, and optionally scans Docker images when a Dockerfile is present.
+
+The resulting security findings are sent to a Flask backend, persisted in SQLite, and analyzed by an AI model to generate structured security reports and remediation recommendations.
+
+The entire application stack is containerized and orchestrated using Docker Compose.
 
 ## Table of Contents
 
+- [Overview](#overview)
 - [Architecture](#architecture)
-- [Pipeline](#pipeline)
+- [Key Features](#key-features)
+- [Security Analysis Workflow](#security-analysis-workflow)
+- [Technology Stack](#technology-stack)
 - [Project Structure](#project-structure)
-- [Tech Stack](#tech-stack)
 - [Prerequisites](#prerequisites)
-- [Environment Variables](#environment-variables)
-- [Running the Stack](#running-the-stack)
+- [Environment Configuration](#environment-configuration)
+- [Getting Started](#getting-started)
 - [Services and Ports](#services-and-ports)
 - [Jenkins Pipeline](#jenkins-pipeline)
 - [API Reference](#api-reference)
-- [Security Notes](#security-notes)
+- [Security Considerations](#security-considerations)
+- [Troubleshooting](#troubleshooting)
+- [Future Improvements](#future-improvements)
 - [Author](#author)
 - [License](#license)
 
 ---
 
+## Overview
+
+AI DevSecOps Hub demonstrates how security testing can be integrated into an automated software delivery workflow.
+
+Instead of manually executing individual security tools, users can submit a public Git repository and initiate a centralized scanning process.
+
+The platform combines multiple components:
+
+- **Jenkins** orchestrates the scanning pipeline.
+- **Trivy** identifies vulnerabilities in repository dependencies and container images.
+- **SonarQube** performs static code analysis and identifies code quality issues and security-related findings.
+- **Flask** provides the backend API for scan submission, result ingestion, and report retrieval.
+- **SQLite** persists scan results and associated analysis.
+- **Groq API** powers AI-assisted interpretation of security findings.
+- **Docker Compose** orchestrates the containerized application services.
+
+The objective is to demonstrate a practical integration of DevSecOps tools into a centralized security analysis workflow.
+
 ## Architecture
 
-The platform is composed of four services connected on a shared Docker bridge network (`devsecops-net`):
+The platform consists of a frontend, a Flask backend, Jenkins, SonarQube, and SQLite, with the application services communicating through their configured interfaces.
 
-- **Frontend** — JavaScript/HTML/CSS interface where users submit repository URLs and view scan results
-- **Backend** — Python Flask API that receives scan reports, stores them in SQLite, sends them to Groq for AI analysis, and serves results to the frontend
-- **Jenkins** — CI server that clones the target repository, runs Trivy inside a Docker container, and posts the raw JSON report to the backend
-- **SonarQube** — Community edition static analysis server available for code quality and security rule evaluation
+### Architecture Diagram
 
-```
-User --> Frontend (3000) --> Backend (7000) <-- Jenkins (2000)
+```text
+                   +---------------------------+
+                   |          User             |
+                   |  Public Repository URL    |
+                   +-------------+-------------+
                                  |
-                              SQLite
+                                 v
+                   +---------------------------+
+                   |         Frontend          |
+                   |      HTML / CSS / JS      |
+                   |       Port: 3000           |
+                   +-------------+-------------+
                                  |
-                              Groq API
+                                 v
+                   +---------------------------+
+                   |       Flask Backend       |
+                   |       REST API            |
+                   |       Port: 7000           |
+                   +-------------+-------------+
                                  |
-                           SonarQube (9000)
+                                 | Trigger Scan
+                                 v
+                   +---------------------------+
+                   |          Jenkins          |
+                   |     CI/CD Orchestration   |
+                   |       Port: 2000           |
+                   +-------------+-------------+
+                                 |
+                    +------------+------------+
+                    |                         |
+                    v                         v
+          +------------------+     +------------------+
+          |      Trivy       |     |    SonarQube     |
+          | Filesystem Scan  |     |  Static Analysis |
+          | Image Scan       |     |  Code Quality    |
+          +--------+---------+     +------------------+
+                   |
+                   | Scan Results
+                   v
+          +---------------------------+
+          |       Flask Backend       |
+          | Report Processing         |
+          | AI-Assisted Analysis      |
+          +-------------+-------------+
+                        |
+              +---------+---------+
+              |                   |
+              v                   v
+       +-------------+    +------------------+
+       |   SQLite    |    |     Groq API     |
+       | Scan History|    | AI Analysis      |
+       +-------------+    +------------------+
 ```
 
----
+The diagram represents the logical workflow. Actual network paths and service dependencies are determined by the Jenkins configuration, Docker Compose configuration, and backend implementation.
 
-## Pipeline
+### Service Responsibilities
 
-1) User submits a public GitHub repository URL through the frontend.
-2) The backend triggers the Jenkins job (devsecops-scan) using the Jenkins REST API.
-3) Jenkins clones the target repository.
-4) SonarQube performs static code analysis and security rule evaluation.
-5) Trivy performs a filesystem vulnerability scan on the repository source code.
-6) If a Dockerfile is detected, Jenkins builds a temporary Docker image and Trivy performs a container image vulnerability scan.
-7) Vulnerability findings are parsed and categorized by severity (Critical, High, Medium, Low).
-8) Jenkins sends the results to the Flask backend.
-9) The backend stores the results in SQLite.
-10) The Groq AI model generates a structured security analysis and remediation report.
-11) The frontend displays scan history, vulnerability summaries, and AI-generated recommendations.
+| Component | Responsibility |
+|---|---|
+| Frontend | Accepts repository URLs and displays scan results |
+| Flask Backend | Coordinates scans, receives reports, and exposes API endpoints |
+| Jenkins | Executes the automated security scanning pipeline |
+| Trivy | Scans repository filesystems and container images |
+| SonarQube | Performs static code analysis and evaluates code quality |
+| SQLite | Stores scan history and associated findings |
+| Groq API | Generates AI-assisted security analysis and remediation suggestions |
+| Docker Compose | Orchestrates the containerized application services |
 
----
+## Key Features
 
-## Project Structure
+### Automated Security Scanning
 
-```
-AI-DevSecOps-Hub/
-|
-|-- backend/                  # Flask API server
-|   |-- app.py                # Application entry point and route definitions
-|   |-- Dockerfile            # Backend container image
-|   |-- requirements.txt      # Python dependencies
-|   |-- data/                 # SQLite database volume mount point (scans.db)
-|
-|-- frontend/                 # Web interface
-|   |-- index.html            # Main UI
-|   |-- Dockerfile            # Frontend container image
-|   |-- (js, css files)       # Client-side logic and styling
-|
-|-- Jenkinsfile               # Declarative pipeline: Clone, Trivy Scan, Send Results
-|-- docker-compose.yml        # Orchestrates backend, frontend, and SonarQube
-|-- .env.example              # Template for required environment variables
-```
+- Accepts public GitHub repository URLs.
+- Triggers Jenkins pipelines through the Jenkins REST API.
+- Clones target repositories for analysis.
+- Performs filesystem vulnerability scanning using Trivy.
+- Supports container image scanning when a Dockerfile is detected.
+- Integrates SonarQube for static code analysis.
+- Categorizes vulnerability findings by severity.
 
----
+### AI-Assisted Security Analysis
 
-## Tech Stack
+- Processes collected scan findings through the Flask backend.
+- Uses the Groq API to generate structured security analysis.
+- Produces remediation recommendations based on the supplied findings.
+- Associates AI-generated analysis with stored scan results.
 
-**Backend**
+AI-generated recommendations should be reviewed and validated before being used to make security decisions.
+
+### Centralized Results Management
+
+- Stores scan results in SQLite.
+- Maintains a history of submitted scans.
+- Exposes API endpoints for retrieving scan summaries and detailed reports.
+- Displays vulnerability summaries and recommendations through the frontend.
+
+### Containerized Infrastructure
+
+- Docker-based application packaging.
+- Docker Compose orchestration.
+- Shared Docker bridge networking.
+- Independent frontend and backend containers.
+- Integration with external Jenkins infrastructure.
+- Persistent storage for configured application data.
+
+## Security Analysis Workflow
+
+The platform follows an automated workflow from repository submission to report presentation.
+
+### Workflow
+
+1. **Repository Submission**
+
+   The user submits a public GitHub repository URL through the frontend.
+
+2. **Pipeline Trigger**
+
+   The Flask backend triggers the configured Jenkins job through the Jenkins REST API.
+
+3. **Repository Cloning**
+
+   Jenkins clones the target repository into its workspace.
+
+4. **Repository Inspection**
+
+   The pipeline identifies project metadata and checks for files such as:
+
+   - `package.json`
+   - `requirements.txt`
+   - `Dockerfile`
+
+5. **Static Code Analysis**
+
+   SonarQube analyzes the repository for supported code quality issues and security-related findings.
+
+6. **Filesystem Vulnerability Scanning**
+
+   Trivy scans the repository and supported dependency files for detectable vulnerabilities and other configured findings.
+
+7. **Container Image Scanning**
+
+   If a Dockerfile is detected, the pipeline can build a temporary Docker image and scan it using Trivy.
+
+8. **Report Processing**
+
+   The pipeline parses the generated reports and aggregates vulnerability counts by severity.
+
+9. **Result Submission**
+
+   Jenkins sends the scan results to the Flask backend.
+
+10. **Result Persistence**
+
+    The backend stores the scan results in SQLite.
+
+11. **AI-Assisted Analysis**
+
+    The backend submits relevant findings to the Groq API for structured analysis and remediation recommendations.
+
+12. **Report Presentation**
+
+    The frontend displays scan history, vulnerability summaries, and available AI-generated recommendations.
+
+## Technology Stack
+
+### Backend
 
 - Python 3.x
-- Flask — REST API framework
-- SQLite — scan result persistence (`scans.db`)
-- Groq API — AI model inference for vulnerability report analysis
+- Flask
+- SQLite
+- boto3 — not required by the documented core workflow
+- Groq API
+- REST APIs
 
-**Frontend**
+### Frontend
 
+- HTML5
+- CSS3
 - JavaScript
 
-**Security Scanning**
+### Security Analysis
 
-- Trivy (`aquasec/trivy:latest`) — filesystem vulnerability scanner; runs as a Docker container inside the Jenkins pipeline
-- SonarQube Community Edition — static code analysis
+- Trivy
+- SonarQube Community Edition
 
-**CI/CD**
+### CI/CD
 
-- Jenkins — triggers and executes the scan pipeline via a parameterised declarative pipeline
+- Jenkins
+- Jenkins REST API
+- Declarative Jenkins Pipeline
 
-**Infrastructure**
+### Infrastructure
 
 - Docker
 - Docker Compose
-- Bridge network (`devsecops-net`) connecting all services
+- Docker bridge networking
+- Linux-based containers
 
----
+### Data Persistence
+
+- SQLite
+- Docker volumes, where configured
+
+## Project Structure
+
+```text
+AI-DevSecOps-Hub/
+|
+|-- backend/
+|   |
+|   |-- app.py
+|   |   Flask application entry point and API routes
+|   |
+|   |-- Dockerfile
+|   |   Backend container configuration
+|   |
+|   |-- requirements.txt
+|   |   Python dependencies
+|   |
+|   |-- data/
+|       SQLite database storage location
+|
+|-- frontend/
+|   |
+|   |-- index.html
+|   |   Main user interface
+|   |
+|   |-- Dockerfile
+|   |   Frontend container configuration
+|   |
+|   |-- js/
+|   |   Client-side application logic, if present
+|   |
+|   |-- css/
+|       Stylesheets, if present
+|
+|-- Jenkinsfile
+|   Declarative security scanning pipeline
+|
+|-- docker-compose.yml
+|   Application service orchestration
+|
+|-- .env.example
+|   Environment variable template
+|
+|-- README.md
+    Project documentation
+```
+
+The exact files and directory names depend on the current repository structure. Retain only entries that exist in your repository.
 
 ## Prerequisites
 
-- Docker and Docker Compose installed
-- Jenkins running and accessible (by default expected at `http://host.docker.internal:2000`)
-- Jenkins must have Docker available on its agent to run the Trivy container
-- A Groq API key (obtain from [console.groq.com](https://console.groq.com))
-- The Jenkins job `devsecops-scan` created and configured with the `Jenkinsfile` from this repository
+Before starting the application, ensure that the following tools and services are available.
 
----
+### Required Tools
 
-## Environment Variables
+- Git
+- Docker
+- Docker Compose
+- A Groq API key
 
-Copy `.env.example` to `.env` and populate the values before starting the stack. The following variables are required by the backend service:
+### Jenkins Requirements
 
-| Variable | Description |
-|---|---|
-| `FLASK_ENV` | Flask environment (`development` or `production`) |
-| `DB_PATH` | Path to the SQLite database file inside the container |
-| `JENKINS_URL` | Base URL of the Jenkins server |
-| `JENKINS_USER` | Jenkins username for API authentication |
-| `JENKINS_TOKEN` | Jenkins API token for authenticating job triggers |
-| `JENKINS_JOB` | Name of the Jenkins job to trigger |
-| `GROQ_API_KEY` | API key for Groq model inference |
+The Jenkins server must be accessible from the backend and configured to execute the scanning pipeline.
 
----
+The project expects Jenkins to be available at:
 
-## Running the Stack
-**Method 1 -->**
-1. Download **AI-DevSecOps-Hub-Setup.bat** from the releases page
-2. Double-click the **.bat** file
-3. If Windows Smart App Control blocks it:
-   Click "More Info"
-   Click "Run Anyway"
-
-**Method 2 -->**
-
-Clone the repository:
-
-```bash
-git clone https://github.com/Atharvakumkar/AI-DevSecOps-Hub.git
-cd AI-DevSecOps-Hub
+```text
+http://host.docker.internal:2000
 ```
 
-Copy the environment template and fill in your values:
+This is the documented default for environments where `host.docker.internal` resolves to the machine hosting Jenkins. Adjust `JENKINS_URL` if your setup differs.
+
+Jenkins must also have:
+
+- The required pipeline job configured.
+- Access to the target Git repositories.
+- Docker access for running Trivy containers.
+- The required pipeline tools and plugins.
+- Appropriate permissions to create temporary images and scan workspaces.
+
+### Jenkins Job
+
+The configured Jenkins job is:
+
+```text
+devsecops-scan
+```
+
+Ensure the job uses the `Jenkinsfile` from this repository and accepts the expected repository URL parameter.
+
+## Environment Configuration
+
+Create a local environment file from the supplied template.
 
 ```bash
 cp .env.example .env
 ```
 
-Start all services:
+Configure the required variables.
+
+| Variable | Description |
+|---|---|
+| `FLASK_ENV` | Flask environment configuration |
+| `DB_PATH` | Path to the SQLite database file inside the container |
+| `JENKINS_URL` | Base URL of the Jenkins server |
+| `JENKINS_USER` | Jenkins username used for API authentication |
+| `JENKINS_TOKEN` | Jenkins API token |
+| `JENKINS_JOB` | Name of the Jenkins job to trigger |
+| `GROQ_API_KEY` | API key used for Groq model inference |
+
+### Example Configuration
+
+The following is a template. Replace the example values with your own configuration.
+
+```dotenv
+FLASK_ENV=development
+DB_PATH=/app/data/scans.db
+
+JENKINS_URL=http://host.docker.internal:2000
+JENKINS_USER=your-jenkins-username
+JENKINS_TOKEN=your-jenkins-api-token
+JENKINS_JOB=devsecops-scan
+
+GROQ_API_KEY=your-groq-api-key
+```
+
+**Security requirements:**
+
+- Never commit your actual `.env` file.
+- Keep `.env.example` limited to placeholder values.
+- Ensure the `.env` file is ignored by Git.
+- Rotate any credentials previously committed to the repository.
+- Use a secrets manager for production deployments where appropriate.
+
+## Getting Started
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/Atharavkumkar/AI-DevSecOps-Hub.git
+
+cd AI-DevSecOps-Hub
+```
+
+### 2. Configure Environment Variables
+
+Copy the environment template:
+
+```bash
+cp .env.example .env
+```
+
+Add the required Jenkins and Groq configuration.
+
+### 3. Verify the Docker Configuration
+
+Review the Compose configuration:
+
+```bash
+docker compose config
+```
+
+Check that required environment variables are configured and that no credentials are hardcoded in the Compose file.
+
+### 4. Start the Application
+
+Build and start the configured services:
 
 ```bash
 docker compose up --build
 ```
 
-To run in detached mode:
+To run the containers in detached mode:
 
 ```bash
 docker compose up --build -d
 ```
 
-To stop and remove containers:
+### 5. Verify the Running Containers
 
 ```bash
-docker compose down
+docker compose ps
 ```
 
-To remove containers along with named volumes (clears the SQLite and SonarQube data):
+Inspect the application logs:
 
 ```bash
-docker compose down -v
+docker compose logs -f
 ```
 
----
+### 6. Access the Application
+
+Once the services are running, open the frontend in your browser.
 
 ## Services and Ports
 
+The documented default service ports are:
+
 | Service | Container Name | Host Port | Container Port |
-|---|---|---|---|
+|---|---|---:|---:|
 | Backend | `devsecops-backend` | 7000 | 7000 |
 | Frontend | `devsecops-frontend` | 3000 | 3000 |
 | SonarQube | `devsecops-sonarqube` | 9000 | 9000 |
-| Jenkins | (external) | 2000 | — |
+| Jenkins | External service | 2000 | Depends on configuration |
 
-The frontend is accessible at `http://localhost:3000`. The backend API is accessible at `http://localhost:7000`. SonarQube is accessible at `http://localhost:9000` (default credentials: admin / admin on first login).
+### Service URLs
 
----
+| Service | URL |
+|---|---|
+| Frontend | http://localhost:3000 |
+| Backend API | http://localhost:7000 |
+| SonarQube | http://localhost:9000 |
+| Jenkins | http://localhost:2000 |
+
+These URLs assume the ports are published or forwarded as configured in your environment.
+
+Jenkins runs outside the documented Compose stack and must be configured separately.
+
+For a new SonarQube installation, complete the initial setup and change the default administrator credentials before using it.
 
 ## Jenkins Pipeline
 
-The Jenkins pipeline accepts a GitHub repository URL and performs automated DevSecOps analysis.
+The Jenkins pipeline coordinates the security analysis process.
 
-**Stage 1 — Prepare Metadata**
+### Stage 1 — Prepare Metadata
 
-Generates a SonarQube-compatible project key and repository metadata.
+Generates project metadata and a SonarQube-compatible project key.
 
-**Stage 2 — Clone Repository**
+### Stage 2 — Clone Repository
 
-Clones the target repository into the Jenkins workspace.
+Clones the submitted repository into the Jenkins workspace.
 
-**Stage 3 — Repository Inspection**
+### Stage 3 — Repository Inspection
 
-Detects:
+Checks for common project files, including:
 
+```text
 package.json
 requirements.txt
 Dockerfile
+```
 
-and determines the repository technology stack.
+The discovered files help identify the project structure and determine which scanning steps are applicable.
 
-**Stage 4 — SonarQube Analysis**
+### Stage 4 — SonarQube Analysis
 
-Runs static code analysis using SonarQube and publishes:
+Runs static code analysis and evaluates supported code quality and security rules.
 
-Bugs
-Vulnerabilities
-Security Hotspots
-Code Smells
-Maintainability Metrics
+Depending on the configuration and language support, SonarQube can report:
 
-**Stage 5 — Trivy Filesystem Scan**
+- Bugs
+- Vulnerabilities
+- Security hotspots
+- Code smells
+- Maintainability metrics
 
-Scans source code dependencies and packages for:
+The availability of these findings depends on the scanner configuration, language support, and enabled rules.
 
-Critical Vulnerabilities
-High Vulnerabilities
-Medium Vulnerabilities
-Low Vulnerabilities
-Exposed Secrets
+### Stage 5 — Trivy Filesystem Scan
 
-**Stage 6 — Trivy Docker Image Scan**
+Runs Trivy against the repository filesystem.
 
-If a Dockerfile exists:
+Depending on the configured scanners and detected files, the report can include findings such as:
 
-Builds a temporary Docker image
-Performs container vulnerability analysis
-Generates a JSON report
+- Vulnerabilities in supported dependencies and packages.
+- Vulnerabilities in operating system packages where applicable.
+- Other findings enabled through the scanner configuration.
 
-**Stage 7 — Parse Results**
+The actual coverage depends on the Trivy version, command-line options, and scanned repository contents.
 
-Aggregates vulnerability counts from generated Trivy reports.
+### Stage 6 — Trivy Container Image Scan
 
-**Stage 8 — Send Results**
+If a Dockerfile is present, the pipeline can:
 
-Posts the aggregated findings to the backend API.
+1. Build a temporary Docker image.
+2. Scan the image using Trivy.
+3. Generate a JSON report.
 
-**Stage 9 — Archive Artifacts**
+This step provides visibility into vulnerabilities in the image's operating system packages and supported application dependencies.
 
-Stores:
+### Stage 7 — Parse Results
 
+Parses the generated reports and aggregates findings by severity.
+
+### Stage 8 — Send Results
+
+Submits the processed findings to the Flask backend for storage and further analysis.
+
+### Stage 9 — Archive Artifacts
+
+The pipeline is configured to retain reports such as:
+
+```text
 trivy-report.json
 trivy-image-report.json
 summary.json
+```
 
-for future reference and debugging.
+These artifacts support debugging, report inspection, and review of scan results.
 
----
+The availability of each artifact depends on which pipeline stages execute successfully.
 
 ## API Reference
 
-The backend exposes the following endpoint. Full request and response schemas are defined in `backend/app.py`.
+The Flask backend exposes endpoints for ingesting and retrieving scan reports.
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/api/report` | Receives a Trivy JSON report from Jenkins; stores it and triggers AI analysis |
-| `GET` | `/api/scans` | Returns a list of all stored scan results |
-| `GET` | `/api/scans/<id>` | Returns the full report and AI analysis for a specific scan |
+| `POST` | `/api/report` | Receives scan results from Jenkins, persists findings, and initiates AI analysis |
+| `GET` | `/api/scans` | Returns stored scan results |
+| `GET` | `/api/scans/<id>` | Returns the report and AI analysis for a specific scan |
 
----
+### POST `/api/report`
 
-## Security Notes
+Receives the scan report submitted by the Jenkins pipeline.
 
-- The `docker-compose.yml` in this repository contains hardcoded credentials including a Jenkins API token and a Groq API key. These should be treated as compromised and rotated immediately. All secrets must be moved to a `.env` file or a secrets manager and loaded via environment variable substitution in Compose.
-- The `.env.example` file exists as a template.
-- The SonarQube default admin password should be changed immediately after first login.
-- Trivy is run with `--scanners vuln` which covers OS packages and application dependencies. For broader coverage, consider adding `--scanners secret` to detect hardcoded secrets in the scanned repository.
+The backend processes the report, stores the available findings, and initiates AI-assisted analysis.
 
----
-## Troubleshooting
-**Docker Permission Denied in Jenkins**
-If Jenkins displays:
+### GET `/api/scans`
 
-```text
-permission denied while trying to connect to the Docker daemon socket
-```
+Retrieves the stored scan history.
 
-ensure that the Jenkins container has access to the Docker socket.
+### GET `/api/scans/<id>`
 
-Temporary workaround:
+Retrieves the details of a particular scan, including its findings and available AI-generated analysis.
+
+**Note:** Consult `backend/app.py` for the actual request payloads, response structures, validation rules, and error codes.
+
+## Security Considerations
+
+Security is a central concern for a platform that clones repositories and executes scanning tools.
+
+### 1. Credential Management
+
+The existing repository documentation identifies hardcoded Jenkins and Groq credentials in the Compose configuration.
+
+Treat any credentials committed to a public repository as compromised.
+
+Before deploying the project:
+
+- Revoke and rotate exposed Jenkins API tokens.
+- Rotate exposed Groq API keys.
+- Remove hardcoded secrets from configuration files.
+- Use environment variables or a secrets manager.
+- Ensure `.env` is excluded from version control.
+- Review Git history for previously committed credentials.
+
+Moving a credential to a new file does not invalidate copies already present in Git history. Rotate exposed credentials even if the original commit is removed.
+
+### 2. Docker Daemon Access
+
+The Jenkins pipeline requires Docker access to execute Trivy containers and potentially build images.
+
+Access to the Docker daemon is highly privileged and can allow control over the host.
+
+Avoid making the Docker socket world-writable or using commands such as:
 
 ```bash
-docker exec -u 0 -it jenkins bash
 chmod 666 /var/run/docker.sock
 ```
 
-Verify access:
+Instead, configure a controlled execution environment with appropriate permissions and consider a dedicated build agent or isolated runner.
+
+### 3. Repository Input Validation
+
+The platform accepts repository URLs from users.
+
+Validate submitted URLs and restrict supported repository sources. Consider protections against:
+
+- Internal network access.
+- Server-side request forgery.
+- Malicious repository contents.
+- Resource exhaustion.
+- Untrusted build scripts.
+- Unauthorized pipeline access.
+
+Cloning and scanning an untrusted repository should not automatically grant its code access to privileged credentials or the Docker host.
+
+### 4. SonarQube Credentials
+
+Change the default SonarQube administrator password during initial setup.
+
+Use dedicated tokens and restrict access to the SonarQube service where possible.
+
+### 5. API Security
+
+For production use, consider:
+
+- Authentication and authorization for scan submission.
+- Rate limiting.
+- Request validation.
+- Payload size limits.
+- Secure handling of AI API responses.
+- Protection against unauthorized report access.
+- Appropriate network isolation.
+- TLS for externally accessible services.
+
+### 6. Scanner Coverage
+
+The existing Trivy configuration uses vulnerability scanning.
+
+Additional scanner types, such as secret detection, should be explicitly configured and tested if required.
+
+Security tools provide different types of coverage. A successful scan does not guarantee that a repository is free from vulnerabilities.
+
+## Troubleshooting
+
+### Jenkins Cannot Access Docker
+
+If Jenkins reports a Docker daemon permission error, verify:
+
+- The Docker daemon is running.
+- The Jenkins execution environment has the intended Docker access.
+- The configured Docker socket or remote endpoint is reachable.
+- The Jenkins agent has the required permissions.
+- The configured Docker CLI can communicate with the daemon.
+
+Test Docker access from the relevant Jenkins execution environment:
 
 ```bash
-docker exec -it jenkins docker ps
+docker ps
 ```
 
-### SonarQube Shows 0 Files Indexed
+Do not resolve permission errors by making the Docker socket world-writable.
 
-Ensure the repository is mounted correctly inside the SonarScanner container and that `sonar.sources` points to the repository root.
+### SonarQube Reports Zero Files Indexed
 
-### Trivy Report Not Generated
+Check that:
+
+- The repository was cloned successfully.
+- The scanner runs against the correct directory.
+- `sonar.sources` points to valid source directories.
+- The project key is configured correctly.
+- The relevant files are not excluded by scanner configuration.
+
+### Trivy Report Is Not Generated
 
 Verify that:
 
-* Docker is running
-* Trivy cache directory exists
-* The repository was cloned successfully
-* The Jenkins workspace has write permissions
+- Docker is available to the Jenkins agent when required.
+- The repository clone completed successfully.
+- Trivy executed without errors.
+- The workspace has the required permissions.
+- The report output path matches the pipeline configuration.
+- The scanned repository contains supported files or dependencies.
 
+### Backend Cannot Trigger Jenkins
 
----
+Verify that:
+
+- `JENKINS_URL` is correct and reachable from the backend container.
+- The Jenkins job exists.
+- `JENKINS_JOB` matches the configured job name.
+- The Jenkins username and API token are valid.
+- The Jenkins user has the necessary permissions.
+- The configured authentication and CSRF handling match the Jenkins setup.
+
+### AI Analysis Fails
+
+Check that:
+
+- `GROQ_API_KEY` is configured correctly.
+- The key has not been revoked or rotated without updating the environment.
+- The backend can reach the Groq API.
+- The configured model is available.
+- The request and response handling match the current API behavior.
+
+Review application logs without exposing API keys, tokens, or sensitive scan contents.
+
+## Future Improvements
+
+Potential enhancements include:
+
+- Adding software composition analysis reports with more detailed dependency information.
+- Generating Software Bills of Materials using Syft.
+- Introducing infrastructure-as-code scanning with Checkov.
+- Adding secrets detection using Gitleaks.
+- Integrating policy-based security gates into Jenkins.
+- Publishing machine-readable SARIF reports.
+- Adding authentication and authorization for users.
+- Implementing rate limiting and isolated scanning workers.
+- Adding automated tests for backend endpoints.
+- Managing infrastructure with Terraform.
+- Improving structured logging and operational dashboards.
+- Introducing retention policies for stored scan reports.
+- Adding automated security regression tests.
+
+These are potential extensions rather than claims about the current implementation.
+
 ## Author
 
-Atharva Kumkar
+**Atharva Kumkar**
 
----
+GitHub: [Atharavkumkar](https://github.com/Atharvakumkar)
 
 ## License
 
-This project is released under the MIT License.
+This project is licensed under the MIT License.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files, to deal in the software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files, to deal in the software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the software, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
